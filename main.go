@@ -75,7 +75,7 @@ func run(ctx context.Context) error {
 	var buf bytes.Buffer
 	for _, user := range users {
 		peer := dev.GetClient(user)
-		if peer != nil {
+		if peer == nil {
 			peer, err = dev.AddClient(ctx, user)
 			if err != nil {
 				return err
