@@ -60,6 +60,42 @@ func NewServerDevice(ctx context.Context, cfg *ServerConfig) (*ServerDevice, err
 	return sd, nil
 }
 
+func (sd *ServerDevice) GetName() string {
+	return sd.Name
+}
+
+func (sd *ServerDevice) WriteConfig(w io.Writer) error {
+	if err := sd.tmpl.ExecuteTemplate(w, "server_head", sd); err != nil {
+		return err
+	}
+	for _, client := range sd.clients {
+		if err := sd.writePeerConfig(w, client); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sd *ServerDevice) GetClientNames() []string {
+	names := make([]string, 0, len(sd.clients))
+	for name := range sd.clients {
+		names = append(names, name)
+	}
+	return names
+}
+
+func (sd *ServerDevice) GetClient(name string) Device {
+	v, ok := sd.clients[name]
+	if ok {
+		return v
+	}
+	return nil
+}
+
+func (sd *ServerDevice) HasClient(name string) bool {
+	return sd.GetClient(name) != nil
+}
+
 func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, error) {
 	octet := len(sd.clients) + 2
 	ip := net.ParseIP(sd.Network)
@@ -97,32 +133,12 @@ func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, err
 	return cd, nil
 }
 
-func (sd *ServerDevice) HasClient(name string) bool {
-	return sd.GetClient(name) != nil
-}
-
-func (sd *ServerDevice) GetClient(name string) Device {
-	v, ok := sd.clients[name]
-	if ok {
-		return v
+func (sd *ServerDevice) RemoveClient(name string) Device {
+	cd := sd.GetClient(name)
+	if cd != nil {
+		delete(sd.clients, name)
 	}
-	return nil
-}
-
-func (sd *ServerDevice) GetName() string {
-	return sd.Name
-}
-
-func (sd *ServerDevice) WriteConfig(w io.Writer) error {
-	if err := sd.tmpl.ExecuteTemplate(w, "server_head", sd); err != nil {
-		return err
-	}
-	for _, client := range sd.clients {
-		if err := sd.writePeerConfig(w, client); err != nil {
-			return err
-		}
-	}
-	return nil
+	return cd
 }
 
 func (sd *ServerDevice) writePeerConfig(w io.Writer, peer *clientDevice) error {

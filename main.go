@@ -155,6 +155,7 @@ func generateDevice(ctx context.Context, cfg *deviceConfig) error {
 	}
 
 	peers := make([]device.Device, len(cfg.Users))
+	userMap := make(map[string]device.Device)
 	for idx, user := range cfg.Users {
 		peer := dev.GetClient(user)
 		if peer == nil {
@@ -164,6 +165,14 @@ func generateDevice(ctx context.Context, cfg *deviceConfig) error {
 			}
 		}
 		peers[idx] = peer
+		userMap[user] = peer
+	}
+
+	// Check for removed user
+	for _, user := range dev.GetClientNames() {
+		if _, ok := userMap[user]; !ok {
+			dev.RemoveClient(user)
+		}
 	}
 
 	if err := srv.Save(ctx); err != nil {
@@ -174,9 +183,13 @@ func generateDevice(ctx context.Context, cfg *deviceConfig) error {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		if err := os.Mkdir(cfg.Dir, 0700); err != nil {
+	} else {
+		if err := os.RemoveAll(cfg.Dir); err != nil {
 			return err
 		}
+	}
+	if err := os.Mkdir(cfg.Dir, 0700); err != nil {
+		return err
 	}
 
 	var buf bytes.Buffer
