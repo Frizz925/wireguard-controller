@@ -2,15 +2,19 @@ package device
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 
 	"github.com/frizz925/wireguard-controller/internal/data"
 	clientRepo "github.com/frizz925/wireguard-controller/internal/repositories/client"
 	serverRepo "github.com/frizz925/wireguard-controller/internal/repositories/server"
+	"github.com/frizz925/wireguard-controller/internal/wireguard"
 )
 
 const DEFAULT_LISTEN_PORT = 51820
+
+var ErrNotFound = errors.New("not found")
 
 type ServerDevice struct {
 	device
@@ -21,7 +25,8 @@ type ServerDevice struct {
 	serverRepo serverRepo.Repository
 	clientRepo clientRepo.Repository
 
-	clients map[string]*clientDevice
+	clients     map[string]*clientDevice
+	lastAddress string
 }
 
 type ServerConfig struct {
@@ -97,20 +102,24 @@ func (sd *ServerDevice) HasClient(name string) bool {
 }
 
 func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, error) {
-	octet := len(sd.clients) + 2
-	ip := net.ParseIP(sd.Network)
-	if ip == nil {
-		return nil, &net.ParseError{}
+	lip := sd.lastAddress
+	if lip == "" {
+		lip = sd.Address
 	}
 
-	ip = ip.To4()
-	if octet > 255 {
-		temp := octet / 256
-		ip[2] = byte(temp)
-		octet -= temp * 256
+	ip := net.ParseIP(lip).To4()
+	octet := ip[3]
+	if octet >= 255 {
+		ip[2]++
+		ip[3] = 0
+	} else {
+		ip[3]++
 	}
-	ip[3] = byte(octet)
 
+	psk, err := wireguard.Genpsk(ctx)
+	if err != nil {
+		return nil, err
+	}
 	cd, err := newClientDevice(ctx, &clientConfig{
 		Config: Config{
 			Name:     name,
@@ -119,26 +128,29 @@ func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, err
 			Netmask:  sd.Netmask,
 			Template: sd.tmpl,
 		},
-		Server:     sd,
-		Repository: sd.clientRepo,
+		Server:       sd,
+		PresharedKey: psk,
+		Repository:   sd.clientRepo,
 	})
 	if err != nil {
 		return nil, err
 	}
-	if err := cd.generatePresharedKey(ctx); err != nil {
-		return nil, err
-	}
 
+	sd.lastAddress = ip.String()
 	sd.clients[name] = cd
 	return cd, nil
 }
 
-func (sd *ServerDevice) RemoveClient(name string) Device {
-	cd := sd.GetClient(name)
-	if cd != nil {
-		delete(sd.clients, name)
+func (sd *ServerDevice) RemoveClient(ctx context.Context, name string) (Device, error) {
+	cd, ok := sd.clients[name]
+	if !ok {
+		return nil, ErrNotFound
 	}
-	return cd
+	if err := cd.Delete(ctx); err != nil {
+		return nil, err
+	}
+	delete(sd.clients, name)
+	return cd, nil
 }
 
 func (sd *ServerDevice) writePeerConfig(w io.Writer, peer *clientDevice) error {
@@ -158,6 +170,7 @@ func (sd *ServerDevice) Load(ctx context.Context) error {
 	sd.Netmask = data.Netmask
 	sd.PrivateKey = data.PrivateKey
 	sd.PublicKey = data.PublicKey
+	sd.lastAddress = data.LastAddress
 
 	names, err := sd.clientRepo.List(ctx, sd.Host, sd.Name)
 	if err != nil {
@@ -194,6 +207,8 @@ func (sd *ServerDevice) Save(ctx context.Context) error {
 
 		PrivateKey: sd.PrivateKey,
 		PublicKey:  sd.PublicKey,
+
+		LastAddress: sd.lastAddress,
 	})
 	if err != nil {
 		return err

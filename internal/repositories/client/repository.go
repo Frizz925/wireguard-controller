@@ -11,4 +11,5 @@ type Repository interface {
 	All(ctx context.Context, host, dev string) ([]*data.Client, error)
 	Find(ctx context.Context, host, dev, name string) (*data.Client, error)
 	Save(ctx context.Context, host, dev string, client *data.Client) error
+	Delete(ctx context.Context, host, dev, name string) error
 }

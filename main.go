@@ -170,8 +170,11 @@ func generateDevice(ctx context.Context, cfg *deviceConfig) error {
 
 	// Check for removed user
 	for _, user := range dev.GetClientNames() {
-		if _, ok := userMap[user]; !ok {
-			dev.RemoveClient(user)
+		if _, ok := userMap[user]; ok {
+			continue
+		}
+		if _, err := dev.RemoveClient(ctx, user); err != nil {
+			return err
 		}
 	}
 

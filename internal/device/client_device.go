@@ -6,30 +6,28 @@ import (
 
 	"github.com/frizz925/wireguard-controller/internal/data"
 	clientRepo "github.com/frizz925/wireguard-controller/internal/repositories/client"
-	"github.com/frizz925/wireguard-controller/internal/wireguard"
 )
 
 type clientDevice struct {
 	device
-
 	Server       *ServerDevice
 	PresharedKey string
-
-	clientRepo clientRepo.Repository
+	repo         clientRepo.Repository
 }
 
 type clientConfig struct {
 	Config
-
-	Server     *ServerDevice
-	Repository clientRepo.Repository
+	Server       *ServerDevice
+	PresharedKey string
+	Repository   clientRepo.Repository
 }
 
 func newRawClientDevice(cfg *clientConfig) *clientDevice {
 	cd := &clientDevice{}
 	applyRawDevice(&cd.device, &cfg.Config)
 	cd.Server = cfg.Server
-	cd.clientRepo = cfg.Repository
+	cd.PresharedKey = cfg.PresharedKey
+	cd.repo = cfg.Repository
 	return cd
 }
 
@@ -50,7 +48,7 @@ func (cd *clientDevice) WriteConfig(w io.Writer) error {
 }
 
 func (cd *clientDevice) Load(ctx context.Context) error {
-	data, err := cd.clientRepo.Find(ctx, cd.Server.Host, cd.Server.Name, cd.Name)
+	data, err := cd.repo.Find(ctx, cd.Server.Host, cd.Server.Name, cd.Name)
 	if err != nil {
 		return err
 	}
@@ -63,7 +61,7 @@ func (cd *clientDevice) Load(ctx context.Context) error {
 }
 
 func (cd *clientDevice) Save(ctx context.Context) error {
-	return cd.clientRepo.Save(ctx, cd.Server.Host, cd.Server.Name, &data.Client{
+	return cd.repo.Save(ctx, cd.Server.Host, cd.Server.Name, &data.Client{
 		Name:         cd.Name,
 		Address:      cd.Address,
 		PrivateKey:   cd.PrivateKey,
@@ -72,8 +70,6 @@ func (cd *clientDevice) Save(ctx context.Context) error {
 	})
 }
 
-func (cd *clientDevice) generatePresharedKey(ctx context.Context) error {
-	var err error
-	cd.PresharedKey, err = wireguard.Genpsk(ctx)
-	return err
+func (cd *clientDevice) Delete(ctx context.Context) error {
+	return cd.repo.Delete(ctx, cd.Server.Host, cd.Server.Name, cd.Name)
 }

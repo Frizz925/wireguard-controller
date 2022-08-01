@@ -51,6 +51,10 @@ func (r *LocalRepository) Save(ctx context.Context, host, dev string, client *da
 	return r.storage.Save(ctx, r.getPath(host, dev, client.Name), client)
 }
 
+func (r *LocalRepository) Delete(ctx context.Context, host, dev, name string) error {
+	return r.storage.Delete(ctx, r.getPath(host, dev, name))
+}
+
 func (r *LocalRepository) getPrefix(host, dev string) string {
 	return path.Join(host, dev)
 }

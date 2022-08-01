@@ -11,4 +11,6 @@ type Server struct {
 
 	PrivateKey string `json:"private_key"`
 	PublicKey  string `json:"public_key"`
+
+	LastAddress string `json:"last_address"`
 }

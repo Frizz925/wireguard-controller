@@ -71,6 +71,10 @@ func (s *LocalStorage) Save(ctx context.Context, name string, data any) error {
 	return json.NewEncoder(f).Encode(data)
 }
 
+func (s *LocalStorage) Delete(ctx context.Context, name string) error {
+	return os.Remove(s.getFilePath(name))
+}
+
 func (s *LocalStorage) ensureDirectory(dir string) error {
 	_, err := os.Stat(dir)
 	if err == nil {
