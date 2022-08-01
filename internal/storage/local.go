@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const DEFAULT_STORAGE_DIR = "storage"
+const DEFAULT_STORAGE_DIR = "data"
 
 type LocalStorage struct {
 	Directory string
