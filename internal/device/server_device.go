@@ -89,7 +89,11 @@ func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, err
 }
 
 func (sd *ServerDevice) GetClient(name string) Device {
-	return sd.clients[name]
+	v, ok := sd.clients[name]
+	if ok {
+		return v
+	}
+	return nil
 }
 
 func (sd *ServerDevice) WriteConfig(w io.Writer) error {

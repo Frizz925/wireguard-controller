@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/frizz925/wireguard-controller/internal/server"
+	"github.com/skip2/go-qrcode"
 )
 
 const (
@@ -69,21 +71,27 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	var buf bytes.Buffer
 	for _, user := range users {
 		peer := dev.GetClient(user)
-		if peer == nil {
+		if peer != nil {
 			peer, err = dev.AddClient(ctx, user)
 			if err != nil {
 				return err
 			}
 		}
-		filename := fmt.Sprintf("%s.conf", user)
-		f, err := os.OpenFile(path.Join(cfgDir, filename), os.O_CREATE|os.O_WRONLY, 0600)
-		if err != nil {
+
+		buf.Reset()
+		if err := peer.WriteConfig(&buf); err != nil {
 			return err
 		}
-		defer f.Close()
-		if err := peer.WriteConfig(f); err != nil {
+
+		prefix := path.Join(cfgDir, user)
+		if err := os.WriteFile(fmt.Sprintf("%s.conf", prefix), buf.Bytes(), 0600); err != nil {
+			return err
+		}
+		if err := qrcode.WriteFile(buf.String(), qrcode.Medium, 512, fmt.Sprintf("%s.png", prefix)); err != nil {
 			return err
 		}
 	}
