@@ -1,0 +1,6 @@
+{{define "server_head" -}}
+[Interface]
+Address = {{.Address}}/{{.Netmask}}
+PrivateKey = {{.PrivateKey}}
+ListenPort = {{.ListenPort}}
+{{end}}
