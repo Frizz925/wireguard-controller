@@ -10,6 +10,8 @@ import (
 	serverRepo "github.com/frizz925/wireguard-controller/internal/repositories/server"
 )
 
+const DEFAULT_LISTEN_PORT = 51820
+
 type ServerDevice struct {
 	device
 
@@ -32,6 +34,12 @@ type ServerConfig struct {
 	ClientRepo clientRepo.Repository
 }
 
+func applyDefaultServerDevice(sd *ServerDevice) {
+	if sd.ListenPort == 0 {
+		sd.ListenPort = DEFAULT_LISTEN_PORT
+	}
+}
+
 func NewRawServerDevice(cfg *ServerConfig) *ServerDevice {
 	sd := &ServerDevice{}
 	applyRawDevice(&sd.device, &cfg.Config)
@@ -40,6 +48,7 @@ func NewRawServerDevice(cfg *ServerConfig) *ServerDevice {
 	sd.serverRepo = cfg.ServerRepo
 	sd.clientRepo = cfg.ClientRepo
 	sd.clients = make(map[string]*clientDevice)
+	applyDefaultServerDevice(sd)
 	return sd
 }
 
@@ -88,12 +97,20 @@ func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, err
 	return cd, nil
 }
 
+func (sd *ServerDevice) HasClient(name string) bool {
+	return sd.GetClient(name) != nil
+}
+
 func (sd *ServerDevice) GetClient(name string) Device {
 	v, ok := sd.clients[name]
 	if ok {
 		return v
 	}
 	return nil
+}
+
+func (sd *ServerDevice) GetName() string {
+	return sd.Name
 }
 
 func (sd *ServerDevice) WriteConfig(w io.Writer) error {

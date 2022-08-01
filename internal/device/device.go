@@ -8,7 +8,14 @@ import (
 	"github.com/frizz925/wireguard-controller/internal/wireguard"
 )
 
+const (
+	DEFAULT_ADDRESS = "10.5.0.1"
+	DEFAULT_NETWORK = "10.5.0.0"
+	DEFAULT_NETMASK = 16
+)
+
 type Device interface {
+	GetName() string
 	WriteConfig(w io.Writer) error
 }
 
@@ -36,6 +43,18 @@ type Config struct {
 	Template *template.Template
 }
 
+func applyDefaultDevice(dev *device) {
+	if dev.Address == "" {
+		dev.Address = DEFAULT_ADDRESS
+	}
+	if dev.Network == "" {
+		dev.Network = DEFAULT_NETWORK
+	}
+	if dev.Netmask == 0 {
+		dev.Netmask = DEFAULT_NETMASK
+	}
+}
+
 func applyRawDevice(dev *device, cfg *Config) {
 	dev.Name = cfg.Name
 	dev.Address = cfg.Address
@@ -44,6 +63,7 @@ func applyRawDevice(dev *device, cfg *Config) {
 	dev.PrivateKey = cfg.PrivateKey
 	dev.PublicKey = cfg.PublicKey
 	dev.tmpl = cfg.Template
+	applyDefaultDevice(dev)
 }
 
 func applyDevice(ctx context.Context, dev *device, cfg *Config) error {

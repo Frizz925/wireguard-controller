@@ -41,6 +41,10 @@ func newClientDevice(ctx context.Context, cfg *clientConfig) (*clientDevice, err
 	return cd, nil
 }
 
+func (sd *clientDevice) GetName() string {
+	return sd.Name
+}
+
 func (cd *clientDevice) WriteConfig(w io.Writer) error {
 	return cd.tmpl.ExecuteTemplate(w, "client", cd)
 }
