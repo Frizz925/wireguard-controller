@@ -9,11 +9,17 @@ import (
 	"strings"
 )
 
+const DEFAULT_STORAGE_DIR = "storage"
+
 type LocalStorage struct {
 	Directory string
 }
 
-func NewLocalStorage(dir string) *LocalStorage {
+func NewLocalStorage(dirs ...string) *LocalStorage {
+	dir := DEFAULT_STORAGE_DIR
+	if len(dirs) > 0 {
+		dir = path.Join(dirs...)
+	}
 	return &LocalStorage{
 		Directory: dir,
 	}

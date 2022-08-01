@@ -12,9 +12,9 @@ type LocalRepository struct {
 	storage *storage.LocalStorage
 }
 
-func NewLocalRepository(dir string) *LocalRepository {
+func NewLocalRepository(dirs ...string) *LocalRepository {
 	return &LocalRepository{
-		storage: storage.NewLocalStorage(dir),
+		storage: storage.NewLocalStorage(dirs...),
 	}
 }
 

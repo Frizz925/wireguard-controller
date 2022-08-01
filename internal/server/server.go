@@ -11,13 +11,6 @@ import (
 	serverRepo "github.com/frizz925/wireguard-controller/internal/repositories/server"
 )
 
-const (
-	DEFAULT_DEVICE_NETMASK  = 16
-	DEFAULT_NETWORK_ADDRESS = "10.5.0.0"
-	DEFAULT_SERVER_ADDRESS  = "10.5.0.1"
-	DEFAULT_STORAGE_PATH    = "storage"
-)
-
 var ErrNotFound = errors.New("not found")
 
 type Server struct {
@@ -30,18 +23,23 @@ type Server struct {
 	devices    map[string]*device.ServerDevice
 }
 
-func New(host, templatesDir string) (*Server, error) {
-	tmpl, err := template.ParseGlob(path.Join(templatesDir, "*.tmpl"))
+type Config struct {
+	Host         string
+	TemplatesDir string
+	ServerRepo   serverRepo.Repository
+	ClientRepo   clientRepo.Repository
+}
+
+func New(cfg *Config) (*Server, error) {
+	tmpl, err := template.ParseGlob(path.Join(cfg.TemplatesDir, "*.tmpl"))
 	if err != nil {
 		return nil, err
 	}
 	return &Server{
-		Host: host,
-
-		tmpl: tmpl,
-
-		serverRepo: serverRepo.NewLocalRepository(DEFAULT_STORAGE_PATH),
-		clientRepo: clientRepo.NewLocalRepository(DEFAULT_STORAGE_PATH),
+		Host:       cfg.Host,
+		tmpl:       tmpl,
+		serverRepo: cfg.ServerRepo,
+		clientRepo: cfg.ClientRepo,
 		devices:    make(map[string]*device.ServerDevice),
 	}, nil
 }
@@ -50,9 +48,6 @@ func (s *Server) AddDevice(ctx context.Context, name string, port int) (*device.
 	sd, err := device.NewServerDevice(ctx, &device.ServerConfig{
 		Config: device.Config{
 			Name:     name,
-			Network:  DEFAULT_NETWORK_ADDRESS,
-			Address:  DEFAULT_SERVER_ADDRESS,
-			Netmask:  DEFAULT_DEVICE_NETMASK,
 			Template: s.tmpl,
 		},
 		Host:       s.Host,
