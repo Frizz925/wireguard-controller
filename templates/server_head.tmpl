@@ -3,4 +3,10 @@
 Address = {{.Address}}/{{.Netmask}}
 PrivateKey = {{.PrivateKey}}
 ListenPort = {{.ListenPort}}
+{{- if ne .PostUp "" -}}
+PostUp = {{.PostUp}}
+{{- end}}
+{{- if ne .PreDown ""}}
+PreDown = {{.PreDown}}
+{{- end}}
 {{end}}

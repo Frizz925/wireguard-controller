@@ -9,5 +9,5 @@ import (
 type Repository interface {
 	List(ctx context.Context, host string) ([]string, error)
 	Find(ctx context.Context, host, dev string) (*data.Server, error)
-	Save(ctx context.Context, server *data.Server) error
+	Save(ctx context.Context, host, dev string, server *data.Server) error
 }

@@ -6,9 +6,11 @@ import (
 	"path"
 	"text/template"
 
+	"github.com/frizz925/wireguard-controller/internal/config"
 	"github.com/frizz925/wireguard-controller/internal/device"
 	clientRepo "github.com/frizz925/wireguard-controller/internal/repositories/client"
 	serverRepo "github.com/frizz925/wireguard-controller/internal/repositories/server"
+	"github.com/frizz925/wireguard-controller/internal/wireguard"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -17,6 +19,7 @@ type Server struct {
 	Host string
 
 	tmpl *template.Template
+	ctrl wireguard.Controller
 
 	serverRepo serverRepo.Repository
 	clientRepo clientRepo.Repository
@@ -26,8 +29,10 @@ type Server struct {
 type Config struct {
 	Host         string
 	TemplatesDir string
-	ServerRepo   serverRepo.Repository
-	ClientRepo   clientRepo.Repository
+
+	Controller wireguard.Controller
+	ServerRepo serverRepo.Repository
+	ClientRepo clientRepo.Repository
 }
 
 func New(cfg *Config) (*Server, error) {
@@ -38,20 +43,28 @@ func New(cfg *Config) (*Server, error) {
 	return &Server{
 		Host:       cfg.Host,
 		tmpl:       tmpl,
+		ctrl:       cfg.Controller,
 		serverRepo: cfg.ServerRepo,
 		clientRepo: cfg.ClientRepo,
 		devices:    make(map[string]*device.ServerDevice),
 	}, nil
 }
 
-func (s *Server) AddDevice(ctx context.Context, name string, port int) (*device.ServerDevice, error) {
+func (s *Server) AddDevice(ctx context.Context, name string, cfg config.Device) (*device.ServerDevice, error) {
 	sd, err := device.NewServerDevice(ctx, &device.ServerConfig{
 		Config: device.Config{
-			Name:     name,
-			Template: s.tmpl,
+			Name:       name,
+			Address:    cfg.Address,
+			Template:   s.tmpl,
+			Controller: s.ctrl,
 		},
 		Host:       s.Host,
-		ListenPort: port,
+		Network:    cfg.Network,
+		Netmask:    cfg.Netmask,
+		DNS:        cfg.DNS,
+		ListenPort: cfg.ListenPort,
+		PostUp:     cfg.PostUp,
+		PreDown:    cfg.PreDown,
 		ServerRepo: s.serverRepo,
 		ClientRepo: s.clientRepo,
 	})
@@ -74,8 +87,9 @@ func (s *Server) Load(ctx context.Context) error {
 	for _, name := range names {
 		sd := device.NewRawServerDevice(&device.ServerConfig{
 			Config: device.Config{
-				Name:     name,
-				Template: s.tmpl,
+				Name:       name,
+				Controller: s.ctrl,
+				Template:   s.tmpl,
 			},
 			Host:       s.Host,
 			ServerRepo: s.serverRepo,
