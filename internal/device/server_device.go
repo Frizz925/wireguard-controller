@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net"
 
+	"github.com/frizz925/wireguard-controller/internal/config"
 	"github.com/frizz925/wireguard-controller/internal/data"
 	clientRepo "github.com/frizz925/wireguard-controller/internal/repositories/client"
 	serverRepo "github.com/frizz925/wireguard-controller/internal/repositories/server"
-	"github.com/frizz925/wireguard-controller/internal/wireguard"
 )
 
-const DEFAULT_LISTEN_PORT = 51820
+const (
+	DEFAULT_NETWORK     = "192.168.128.0"
+	DEFAULT_NETMASK     = 24
+	DEFAULT_LISTEN_PORT = 51820
+)
 
 var ErrNotFound = errors.New("not found")
 
@@ -20,28 +23,48 @@ type ServerDevice struct {
 	device
 
 	Host       string
+	Network    string
+	Netmask    int
+	DNS        string
 	ListenPort int
+
+	PostUp  string
+	PreDown string
 
 	serverRepo serverRepo.Repository
 	clientRepo clientRepo.Repository
 
-	clients     map[string]*clientDevice
-	lastAddress string
+	clients map[string]*ClientDevice
 }
 
 type ServerConfig struct {
 	Config
 
 	Host       string
+	Network    string
+	Netmask    int
+	DNS        string
 	ListenPort int
+
+	PostUp  string
+	PreDown string
 
 	ServerRepo serverRepo.Repository
 	ClientRepo clientRepo.Repository
 }
 
 func applyDefaultServerDevice(sd *ServerDevice) {
-	if sd.ListenPort == 0 {
+	if sd.Network == "" {
+		sd.Network = DEFAULT_NETWORK
+	}
+	if sd.Netmask == 0 {
+		sd.Netmask = DEFAULT_NETMASK
+	}
+	if sd.ListenPort <= 0 {
 		sd.ListenPort = DEFAULT_LISTEN_PORT
+	}
+	if sd.DNS == "" {
+		sd.DNS = sd.Address
 	}
 }
 
@@ -49,10 +72,15 @@ func NewRawServerDevice(cfg *ServerConfig) *ServerDevice {
 	sd := &ServerDevice{}
 	applyRawDevice(&sd.device, &cfg.Config)
 	sd.Host = cfg.Host
+	sd.Network = cfg.Network
+	sd.Netmask = cfg.Netmask
+	sd.DNS = cfg.DNS
 	sd.ListenPort = cfg.ListenPort
+	sd.PostUp = cfg.PostUp
+	sd.PreDown = cfg.PreDown
 	sd.serverRepo = cfg.ServerRepo
 	sd.clientRepo = cfg.ClientRepo
-	sd.clients = make(map[string]*clientDevice)
+	sd.clients = make(map[string]*ClientDevice)
 	applyDefaultServerDevice(sd)
 	return sd
 }
@@ -65,8 +93,20 @@ func NewServerDevice(ctx context.Context, cfg *ServerConfig) (*ServerDevice, err
 	return sd, nil
 }
 
-func (sd *ServerDevice) GetName() string {
-	return sd.Name
+func (sd *ServerDevice) Apply(cfg config.Device) {
+	sd.Address = cfg.Address
+	sd.Network = cfg.Network
+	sd.Netmask = cfg.Netmask
+	sd.PostUp = cfg.PostUp
+	sd.PreDown = cfg.PreDown
+	if cfg.ListenPort > 0 {
+		sd.ListenPort = cfg.ListenPort
+	}
+	if cfg.DNS != "" {
+		sd.DNS = cfg.DNS
+	} else {
+		sd.DNS = cfg.Address
+	}
 }
 
 func (sd *ServerDevice) WriteConfig(w io.Writer) error {
@@ -89,7 +129,7 @@ func (sd *ServerDevice) GetClientNames() []string {
 	return names
 }
 
-func (sd *ServerDevice) GetClient(name string) Device {
+func (sd *ServerDevice) GetClient(name string) *ClientDevice {
 	v, ok := sd.clients[name]
 	if ok {
 		return v
@@ -101,32 +141,17 @@ func (sd *ServerDevice) HasClient(name string) bool {
 	return sd.GetClient(name) != nil
 }
 
-func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, error) {
-	lip := sd.lastAddress
-	if lip == "" {
-		lip = sd.Address
-	}
-
-	ip := net.ParseIP(lip).To4()
-	octet := ip[3]
-	if octet >= 255 {
-		ip[2]++
-		ip[3] = 0
-	} else {
-		ip[3]++
-	}
-
-	psk, err := wireguard.Genpsk(ctx)
+func (sd *ServerDevice) AddClient(ctx context.Context, user config.User) (*ClientDevice, error) {
+	psk, err := sd.device.ctrl.Genpsk(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cd, err := newClientDevice(ctx, &clientConfig{
+	cd, err := NewClientDevice(ctx, &clientConfig{
 		Config: Config{
-			Name:     name,
-			Network:  sd.Network,
-			Address:  ip.String(),
-			Netmask:  sd.Netmask,
-			Template: sd.tmpl,
+			Name:       user.Name,
+			Address:    user.Address,
+			Controller: sd.ctrl,
+			Template:   sd.tmpl,
 		},
 		Server:       sd,
 		PresharedKey: psk,
@@ -135,25 +160,26 @@ func (sd *ServerDevice) AddClient(ctx context.Context, name string) (Device, err
 	if err != nil {
 		return nil, err
 	}
-
-	sd.lastAddress = ip.String()
-	sd.clients[name] = cd
+	if err := cd.Save(ctx); err != nil {
+		return nil, err
+	}
+	sd.clients[user.Name] = cd
 	return cd, nil
 }
 
-func (sd *ServerDevice) RemoveClient(ctx context.Context, name string) (Device, error) {
+func (sd *ServerDevice) RemoveClient(ctx context.Context, name string) (*ClientDevice, error) {
 	cd, ok := sd.clients[name]
 	if !ok {
 		return nil, ErrNotFound
 	}
+	delete(sd.clients, name)
 	if err := cd.Delete(ctx); err != nil {
 		return nil, err
 	}
-	delete(sd.clients, name)
 	return cd, nil
 }
 
-func (sd *ServerDevice) writePeerConfig(w io.Writer, peer *clientDevice) error {
+func (sd *ServerDevice) writePeerConfig(w io.Writer, peer *ClientDevice) error {
 	return sd.tmpl.ExecuteTemplate(w, "server_peer", peer)
 }
 
@@ -162,27 +188,19 @@ func (sd *ServerDevice) Load(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	sd.Host = data.Host
-	sd.Name = data.Name
-	sd.ListenPort = data.ListenPort
-	sd.Address = data.Address
-	sd.Network = data.Network
-	sd.Netmask = data.Netmask
 	sd.PrivateKey = data.PrivateKey
 	sd.PublicKey = data.PublicKey
-	sd.lastAddress = data.LastAddress
 
 	names, err := sd.clientRepo.List(ctx, sd.Host, sd.Name)
 	if err != nil {
 		return err
 	}
 	for _, name := range names {
-		cd := newRawClientDevice(&clientConfig{
+		cd := NewRawClientDevice(&clientConfig{
 			Config: Config{
-				Name:     name,
-				Network:  sd.Network,
-				Netmask:  sd.Netmask,
-				Template: sd.tmpl,
+				Name:       name,
+				Controller: sd.ctrl,
+				Template:   sd.tmpl,
 			},
 			Server:     sd,
 			Repository: sd.clientRepo,
@@ -196,27 +214,8 @@ func (sd *ServerDevice) Load(ctx context.Context) error {
 }
 
 func (sd *ServerDevice) Save(ctx context.Context) error {
-	err := sd.serverRepo.Save(ctx, &data.Server{
-		Host:       sd.Host,
-		Name:       sd.Name,
-		ListenPort: sd.ListenPort,
-
-		Address: sd.Address,
-		Network: sd.Network,
-		Netmask: sd.Netmask,
-
+	return sd.serverRepo.Save(ctx, sd.Host, sd.Name, &data.Server{
 		PrivateKey: sd.PrivateKey,
 		PublicKey:  sd.PublicKey,
-
-		LastAddress: sd.lastAddress,
 	})
-	if err != nil {
-		return err
-	}
-	for _, client := range sd.clients {
-		if err := client.Save(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
 }

@@ -47,8 +47,8 @@ func (r *LocalRepository) Find(ctx context.Context, host, dev, name string) (*da
 	return data, nil
 }
 
-func (r *LocalRepository) Save(ctx context.Context, host, dev string, client *data.Client) error {
-	return r.storage.Save(ctx, r.getPath(host, dev, client.Name), client)
+func (r *LocalRepository) Save(ctx context.Context, host, dev, name string, client *data.Client) error {
+	return r.storage.Save(ctx, r.getPath(host, dev, name), client)
 }
 
 func (r *LocalRepository) Delete(ctx context.Context, host, dev, name string) error {

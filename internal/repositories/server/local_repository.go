@@ -31,8 +31,8 @@ func (r *LocalRepository) Find(ctx context.Context, host, dev string) (*data.Ser
 	return data, nil
 }
 
-func (r *LocalRepository) Save(ctx context.Context, server *data.Server) error {
-	return r.storage.Save(ctx, r.getPath(server.Host, server.Name), server)
+func (r *LocalRepository) Save(ctx context.Context, host, dev string, server *data.Server) error {
+	return r.storage.Save(ctx, r.getPath(host, dev), server)
 }
 
 func (r *LocalRepository) getPath(host, dev string) string {

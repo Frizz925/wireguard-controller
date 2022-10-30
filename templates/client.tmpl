@@ -1,12 +1,12 @@
 {{define "client" -}}
 [Interface]
-Address = {{.Address}}/{{.Netmask}}
+Address = {{.Address}}/{{.Server.Netmask}}
 PrivateKey = {{.PrivateKey}}
-DNS = {{.Server.Address}}
+DNS = {{.Server.DNS}}
 
 [Peer]
 PublicKey = {{.Server.PublicKey}}
 PresharedKey = {{.PresharedKey}}
-AllowedIPs = {{.Server.Address}}/32
+AllowedIPs = 0.0.0.0/0
 Endpoint = {{.Server.Host}}:{{.Server.ListenPort}}
 {{end}}
