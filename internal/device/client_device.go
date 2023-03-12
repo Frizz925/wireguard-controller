@@ -87,7 +87,7 @@ func (cd *ClientDevice) Apply(cfg config.User) {
 	cd.Name = cfg.Name
 	cd.Address = cfg.Address
 	if len(cfg.AllowedIPs) > 0 {
-		cd.AllowedIPs = strings.Join(cfg.AllowedIPs, ",")
+		cd.AllowedIPs = strings.Join(cfg.AllowedIPs, ", ")
 	} else {
 		cd.AllowedIPs = cd.defaultAllowedIPs()
 	}
